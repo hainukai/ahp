@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+ 
+ <title>家族意見可視化ツール</title>
+  <style>
+    body {
+    -webkit-text-size-adjust: 100%;
+    -webkit-touch-callout:none;
+     -webkit-user-select:none;
+     -moz-user-select:none;
+     -ms-user-select:none;
+     user-select:none
+     margin-right: auto;
+      margin-left : auto;
+       width:98%;
+    }
+    table{
+    width:100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0px 10px;
+    }
+    canvas{
+    width:100%;
+    canvas-layout: fixed;
+    }
+    
+    
+  </style>
+    <script>
+    var textC = ["C1:患者の自分らしい生活", "C2:病状悪化時の対応",  "C3:介護負担", "C4:苦痛の緩和"];
+
+            let textA = ["A1:病院", "A2:在宅","A3:緩和ケア病棟"];
+    
+    let textSig = ["左側がとても重要", "左側がやや重要", "どちらも同じくらい重要", "右側がやや重要", "右側がとても重要"];
+        let valSig = [5, 3, 1, 1/3, 0.2];
+        let pcmC = [];
+        let nC = 4;
+        let wC =  [];
+    
+        for (let i = 0; i < nC; i++) {
+            pcmC[i] = [];
+            for (let j = 0; j < nC; j++) {
+                pcmC[i][j] = 1;
+            }
+           wC[i] =  1.0 / nC ;
+            wC.lambda = nC;
+            wC.ci = 0;
+        }
+      
+        let pcmA = [];
+        let nA =  3;
+        let wAs = [];
+    
+        for (let k = 0; k < nC; k++) {
+            pcmA[k] = [];
+            for (let i = 0; i < nA; i++) {
+                pcmA[k][i] = [];
+                for (let j = 0; j < nA; j++) {
+                    pcmA[k][i][j] = 1;
+                }
+            }
+        }
+        for (let k = 0; k < nC; k++) {
+            wAs[k] = [];
+            for (let i = 0; i < nA; i++) {
+                wAs[k][i] =  1 / nA
+            }
+            wAs[k].lambda = nA;
+            wAs[k].ci = 0;
+        }
+    
+        let wTotal = [];
+        for (let i = 0; i < nA; i++) {
+            wTotal[i] = 1 / nA;
+        }
+    
+  
+        function stdout(mat) {
+            var str = "";
+            for (let i = 0; i < mat.length; i++) {
+                for (let j = 0; j < mat[i].length; j++) {
+                    str = str + " " + mat[i][j];
+                }
+                str = str + "\n"
+            }
+            return str;
+        }
+        function stdoutVec(x) {
+            var str = "";
+            for (let i = 0; i < x.length; i++) {
+                str = str + " " + x[i];
+                str = str + "\n"
+            }
+            return str;
+        }
+    
+    
+
+            
+                
+        function getVal(name) {
+            var fruits = document.getElementsByName(name);
+            for (var i = 0; i < fruits.length; i++) {
+                if (fruits[i].checked) {
+                    return Number(fruits[i].value);
+                }
+            }
+        }
+    
+        function fc(name, mat, i, j, x) {
+            mat[i][j] = getVal(name);
+            mat[j][i] = 1 / mat[i][j];
+            eigen(mat, x);
+            updateC();
+        }
+    
+      
+    function fc01() { fc("c01", pcmC, 0, 1, wC); }
+    function fc02() { fc("c02", pcmC, 0, 2, wC); }
+    function fc03() { fc("c03", pcmC, 0, 3, wC); }
+   
+
+    function fc12() { fc("c12", pcmC, 1, 2, wC); }
+    function fc13() { fc("c13", pcmC, 1, 3, wC); }
+    function fc23() { fc("c23", pcmC, 2, 3, wC); }
+  
+    function fa001() { fc("a001", pcmA[0], 0, 1, wAs[0]); }
+    function fa002() { fc("a002", pcmA[0], 0, 2, wAs[0]); }
+    function fa012() { fc("a012", pcmA[0], 1, 2, wAs[0]); }
+   
+    
+    function fa101() { fc("a101", pcmA[1], 0, 1, wAs[1]); }
+    function fa102() { fc("a102", pcmA[1], 0, 2, wAs[1]); }
+    function fa112() { fc("a112", pcmA[1], 1, 2, wAs[1]); }
+    
+
+    function fa201() { fc("a201", pcmA[2], 0, 1, wAs[2]); }
+    function fa202() { fc("a202", pcmA[2], 0, 2, wAs[2]); }
+    function fa212() { fc("a212", pcmA[2], 1, 2, wAs[2]); }
+      
+    function fa301() { fc("a301", pcmA[3], 0, 1, wAs[3]); }
+    function fa302() { fc("a302", pcmA[3], 0, 2, wAs[3]); }
+    function fa312() { fc("a312", pcmA[3], 1, 2, wAs[3]); }
+      
+        function updateC() {
+    
+            for (let i = 0; i < nA; i++) {
+                wTotal[i] = 0;
+                for (let k = 0; k < nC; k++) {
+                    wTotal[i] += wAs[k][i] * wC[k] 
+                }
+            }
+            drawGraph();
+            writeSummary();
+        }
+    
+        function eigen(mat, x) {
+            let vec = []; preVec = [];
+            for (let i = 0; i < mat.length; i++) { vec[i] = 1; preVec[i] = 1; }
+    
+            for (let itr = 0; itr < 100; itr++) {
+                for (let i = 0; i < mat.length; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < mat[i].length; j++) {
+                        sum = sum + mat[i][j] * preVec[j];
+                    }
+                    vec[i] = sum;
+                }
+    
+             
+                x.lambda =  vec[0] / preVec[0];
+                if((x.lambda - x.length)>0){
+                x.ci =(x.lambda - x.length)/ (x.length - 1);
+                }
+                else{
+                x.ci=0
+                }
+                let sum2 = 0;
+                for (let i = 0; i < vec.length; i++) {
+                    sum2 = sum2 + vec[i];
+                }
+                for (let i = 0; i < vec.length; i++) {
+                    vec[i] = vec[i] / sum2;
+                    preVec[i] = vec[i];
+                }
+            }
+            for (let i = 0; i < mat.length; i++) { x[i] = vec[i]; }
+        }
+    
+        let defCheckI = 2;
+    
+        function writeButtonsRowC(i, j) {
+            let str = "<TR border=\"1\">";
+            str += "<TD style=\"border-left-style: hidden;border-top-style: hidden;border-bottom-style: hidden;\">" + textC[i] + "</TD>";
+            for (let r = 0; r < textSig.length; r++) {
+                str += "<TD style=\"text-align: center;\"><label><input name=\"c" + i + j + "\" type=\"radio\" value=\"" + valSig[r] + "\" onchange=\"fc" + i + j + "()\"";
+                if (r == defCheckI) {
+                    str += "checked";
+                }
+                str += ">" +  ["「"+textC[i]+"」がとても重要", "「"+textC[i]+"」がやや重要", "どちらも同じくらい重要", "「"+textC[j]+"」がやや重要", "「"+textC[j]+"」がとても重要"][r] +"</label > "+ "</TD > ";
+            }
+            str += "<TD style=\"border-right-style: hidden;border-top-style: hidden;border-bottom-style: hidden;\">&nbsp;" + textC[j] + "</TD>";
+            str += "</TR>";
+            return str;
+        }
+    
+        function writeButtonsRowA(k, i, j) {
+            let str = "<TR border=\"1\">";
+            str += "<TD style=\"border-left-style: hidden;border-top-style: hidden;border-bottom-style: hidden;\">" + textA[i] + "</TD>";
+            for (let r = 0; r < textSig.length; r++) {
+                str += "<TD><label><input name=\"a" + k + i + j + "\" type=\"radio\"  id=\"" + k + i + j + r+ "\" value=\"" + valSig[r] + "\" onchange=\"fa" + k + i + j + "()\"";
+                if (r == defCheckI) {
+                    str += "checked";
+                }
+                str += ">" + [""+textA[i]+"がとても重要", ""+textA[i]+"がやや重要", "どちらも同じくらい重要", ""+textA[j]+"がやや重要", ""+textA[j]+"がとても重要"][r] +"</label > "+ "</TD > ";
+            }
+            str += "<TD style=\"border-right-style: hidden;border-top-style: hidden;border-bottom-style: hidden;\">&nbsp;" + textA[j] + "</TD>";
+            str += "</TR>";
+            return str;
+        }
+      
+    
+        let summary;
+    
+        function writeSummary() {
+            str = "";
+            str = "<TABLE border==\"1\">";
+            str += "<TR>";
+            str += "<TD></TD>";
+            for (let k = 0; k < nC; k++) {
+                str += "<TD bgcolor=\"#ffff00\">" + textC[k] + "</TD>";
+            }
+            str += "</TR>";
+    
+            str += "<TR>";
+            str += "<TD></TD>";
+            for (let k = 0; k < nC; k++) {
+                str += "<TD bgcolor=\"#ffff00\">" + wC[k].toFixed(3) + "</TD>";
+            }
+            str += "<TD bgcolor=\"#ffaaff\">総合評価値</TD>";
+            str += "</TR>";
+            for (let i = 0; i < nA; i++) {
+                str += "</TR>";
+                str += "<TD>" + textA[i] + "</TD>";
+                for (let k = 0; k < nC; k++) {
+                    str += "<TD>" + wAs[k][i].toFixed(3) + "</TD>";
+                }
+                str += "<TD bgcolor=\"#ffaaff\">" + wTotal[i].toFixed(3) + "</TD>";
+                str += "</TR>";
+            }
+            str += "</TABLE>";
+    
+            str += "<HR>";
+    
+            str += "<PRE>";
+            str += "評価基準の一対比較行列\n";
+            str += stdout(pcmC);
+            str += "評価基準の重み\n";
+            for (let k = 0; k < nC; k++) {
+                str +=  wC[k].toFixed(5) +"<br>";
+            }
+            str += "&nbsp;&nbsp;(CI=" + wC.ci.toFixed(5) + ")\n\n";
+           
+            
+            str += "各評価基準について...\n\n";
+    
+            for (let k = 0; k < nC; k++) {
+                str += textC[k];
+                str += "&nbsp;&nbsp;に注目した代替案の一対比較行列\n";
+                str += stdout(pcmA[k]);
+                str += "代替案の評価値\n";
+                for (let i = 0; i < nA; i++) {
+                str +=  wAs[k][i].toFixed(5) +"<br>";
+            }
+                str += "&nbsp;&nbsp;(CI=" + wAs[k].ci.toFixed(5) + ")\n\n";
+              
+            }
+            
+            str += "</PRE>";
+            summary.innerHTML = str;
+            return;
+        }
+    
+        let canvas2D;
+        let context2D;
+        let graphX0 = 260;
+        let graphXN = 15;
+        let cColors = ["#0000ff", "#00ff00", "#00ffff", "#ff0000", "#ff00ff","#3f0450","#f60266"];
+    
+        function GlobalWidth() {
+            return window.innerWidth;
+        }
+        function GlobalHeight() {
+            return window.innerHeight;
+        }
+    
+        function drawGraph() {
+            context2D.clearRect(0, 0, context2D.canvas.width, context2D.canvas.height);
+    
+            
+            let h = [canvas2D.height *1/ 12,canvas2D.height *3/ 12,canvas2D.height *5/ 12,canvas2D.height *7/ 12,canvas2D.height *9/ 12];
+            
+            context2D.font = "20px 'Times'";
+                context2D.strokeStyle = "black";
+                context2D.lineWidth = 1;
+                
+                context2D.strokeText("家族の各意見の重要度", 0, h[3]);
+                for (let i=0; i< nC; i++){
+                context2D.strokeText("C"+(i+1)+":"+wC[i].toFixed(3), i*100+canvas2D.width/4.5, h[3]/2+h[4]/2);
+                }
+                let currentW = graphX0;
+                context2D.lineWidth  = canvas2D.height / 12;
+    
+            for (let i = 0; i < nA; i++) {
+                context2D.font = "20px 'Times'";
+                context2D.strokeStyle = "rgb(0,0,0)";
+                context2D.lineWidth = 1;
+                context2D.strokeText(textA[i], 0, h[i]);
+    
+                let currentW = graphX0;
+                context2D.lineWidth = canvas2D.height / 12;
+                
+                  for (let k = 0; k < nC; k++) {
+                    context2D.beginPath();
+                    context2D.moveTo(currentW, h[3]);
+                     currentW += (canvas2D.width - graphX0 - graphXN) *0.5* wC[k];
+                    context2D.lineTo(currentW, h[3]);
+                    context2D.strokeStyle = cColors[k];
+                    context2D.stroke();
+                   }  
+             
+                currentW = graphX0;
+                
+                 
+                for (let k = 0; k < nC; k++) {
+                    context2D.beginPath();
+                    context2D.moveTo(currentW, h[i]);
+                    currentW += (canvas2D.width - graphX0 - graphXN) * wAs[k][i] * wC[k];
+                    context2D.lineTo(currentW, h[i]);
+                    context2D.strokeStyle = cColors[k];
+                    context2D.stroke();
+                }
+             
+    
+                context2D.font = "20px 'Times'";
+                context2D.strokeStyle = "rgb(0,0,0)";
+                context2D.lineWidth = 1;
+                context2D.strokeText(wTotal[i].toFixed(3), currentW + 10, h[i]);
+            }
+    
+          for (let i = 0; i < 4; i++) {
+            context2D.lineWidth =canvas2D.height / 30;
+            context2D.beginPath();
+            context2D.moveTo(canvas2D.width / 20, canvas2D.height * (16.7 + i) / 22);
+            context2D.lineTo(canvas2D.width / 20 + canvas2D.height / 20, canvas2D.height * (16.7 + i) / 22);
+            context2D.strokeStyle = cColors[i];
+            context2D.stroke();
+            
+                context2D.font = "15px 'Times'";
+                context2D.strokeStyle = "rgb(0,0,0)";
+                context2D.lineWidth = 1;
+                context2D.strokeText(textC[i], canvas2D.width/100 + canvas2D.height /7, canvas2D.height *  (16+i) / 21);
+            }
+        }
+        function init() {
+           
+            summary = document.getElementById("summary");
+    
+            canvas2D = document.getElementById("canvas2d");
+            canvas2D.width = GlobalWidth();
+            canvas2D.height = canvas2D.width / 2;
+            context2D = canvas2D.getContext("2d");
+            updateC();
+         
+           }
+       window.onload = init;
+       </script>
+
+
+       <body>
+       <h1>● 階層分析法を用いた家族意見可視化ツール </h1>
+    <LI>評価基準(因子)の数:&nbsp;
+      <script>
+        document.write("<U>" + nC + "</U>"); document.write("&nbsp;&nbsp;"); for (let k = 0; k < nC; k++) { document.write("&nbsp;&nbsp;<U>" + textC[k] + "</U>"); }
+      </script>
+    </LI>
+    <LI>代替案の数&nbsp;
+      <script>
+        document.write("<U>" + nA + "</U>"); document.write("&nbsp;&nbsp;"); for (let i = 0; i < nA; i++) { document.write("&nbsp;&nbsp;<U>" + textA[i] + "</U>"); }
+      </script>
+    </LI>
+  </UL> 
+   <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ID &nbsp;<select id="PID">
+<option value="－">－</option>
+<option value="1">1</option>
+<option value="2">2</option>
+<option value="3">3</option>
+<option value="4">4</option>
+<option value="5">5</option>
+<option value="6">6</option>
+<option value="7">7</option>
+<option value="8">8</option>
+<option value="9">9</option>
+<option value="10">10</option>
+<option value="11">11</option>
+<option value="12">12</option>
+<option value="13">13</option>
+<option value="14">14</option>
+<option value="15">15</option>
+<option value="16">16</option>
+<option value="17">17</option>
+<option value="18">18</option>
+<option value="19">19</option>
+<option value="20">20</option>
+</select>
+    <button id="download" type="button">CSVファイル ダウンロード</button>
+  <script>
+function downloadCSV() {
+   var PID = document.getElementById('PID').value ;
+   var filename = PID+".csv";
+                var text = "";
+                      text += "PID"+",";
+                    for (let i = 0; i < nC; i++) {
+                text += "C"+(i+1) +",";};
+                     for (let i = 0; i < nA; i++) {
+                text += "A"+(i+1) +",";};
+                  
+                   for (let i = 0; i < nA; i++) { 
+                   for (let j = 0; j < nC; j++) { 
+                text += "C"+(j+1) +"A"+(i+1)+",";};};
+                     for (let i = -1; i < nC; i++) {
+                text += "CIC"+ (i+1) +",";};
+                for (let i = 0; i < nC; i++) {
+                for (let j = 0; j < nC; j++) {
+                text += "C"+(i+1)+"C"+(j+1)+"一対比較,";};}
+                for (let i = 0; i < nC; i++) {
+                for (let u = 0; u < nA; u++) {
+                for (let j = 0; j < nA; j++) {
+                text += "C"+(i+1)+"A"+(u+1)+"A"+(j+1)+"一対比較,";};};}
+                
+                
+                text +=","+"\n";
+                   
+                     text += ""+PID+",";
+                     for (let i = 0; i < nC; i++) {
+                 text+= wC[i] +",";}
+                    for (let i = 0; i < nA; i++) {
+                 text+= wTotal[i] +",";}
+                 
+                  for (let i = 0; i < nA; i++) {for (let j = 0;j < nC; j++) {
+                text += wAs[j][i]+",";};}
+                   
+                     text+=Math.floor(wC.ci*100000)/100000+",";
+                      for (let i = 0; i < nC; i++) {
+                text += Math.floor(wAs[i].ci*10000)/10000+",";}
+                
+              for (let i = 0; i < nC; i++) {    for (let j = 0; j < nC; j++){
+                 text+=pcmC[i][j] +",";};}
+                 
+                 for (let a = 0; a < nC; a++){
+                   for (let i = 0; i < nA; i++){for (let j = 0; j < nA; j++){
+                 text+=pcmA[a][i][j] +",";};};}
+                
+ 
+  const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+  const blob = new Blob([bom, text], { type: "text/csv" });
+
+  if (window.navigator.msSaveBlob) {
+    window.navigator.msSaveBlob(blob, filename);
+
+   
+  } else {
+    
+    const url = (window.URL || window.webkitURL).createObjectURL(blob);
+    const download = document.createElement("a");
+    download.href = url;
+    download.download = filename;
+    download.click();
+    (window.URL || window.webkitURL).revokeObjectURL(url);
+  }
+}
+
+const download = document.getElementById("download");
+download.addEventListener("click", downloadCSV, false);
+    </script>
+<form id="target"> 【評価基準比較】
+    <TABLE border="1px">
+      <script>
+        document.write(writeButtonsRowC(0, 1));
+      </script>
+      <script>
+        document.write(writeButtonsRowC(0, 2));
+      </script>
+      <script>
+        document.write(writeButtonsRowC(0, 3));
+      </script>
+      
+       <script>
+        document.write(writeButtonsRowC(1, 2));
+      </script>
+      <script>
+        document.write(writeButtonsRowC(1, 3));
+      </script>
+      
+      <script>
+        document.write(writeButtonsRowC(2, 3));
+      </script>
+     
+          </TABLE>
+    <BR>
+    <BR> 【代替案比較】
+      <BR>
+      <script>
+        document.write(textC[0]+"　に対して");
+      </script>
+      <TABLE border="1px">
+        <script>
+          document.write(writeButtonsRowA(0, 0, 1));
+        </script>
+        <script>
+        document.write(writeButtonsRowA(0, 0, 2));
+        </script>
+        <script>
+        document.write(writeButtonsRowA(0, 1, 2));
+        </script>
+      </TABLE>
+      <script>
+        document.write(textC[1]+"　に対して");
+      </script>
+      <TABLE border="1px">
+        <script>
+          document.write(writeButtonsRowA(1, 0, 1));
+        </script>
+        <script>
+       document.write(writeButtonsRowA(1, 0, 2));
+        </script>
+        <script>
+        document.write(writeButtonsRowA(1, 1, 2));
+        </script>
+      </TABLE>
+      <script>
+        document.write(textC[2]+"　に対して");
+      </script>
+      <TABLE border="1px">
+        <script>
+          document.write(writeButtonsRowA(2, 0, 1));
+        </script>
+        <script>
+          document.write(writeButtonsRowA(2, 0, 2));
+        </script>
+        <script>
+          document.write(writeButtonsRowA(2, 1, 2));
+        </script>
+      </TABLE>
+      <script>
+          document.write(textC[3]+"　に対して");
+      </script>
+      <TABLE border="1px">
+        <script>
+          document.write(writeButtonsRowA(3, 0, 1));
+        </script>
+        <script>
+          document.write(writeButtonsRowA(3, 0, 2));
+        </script>
+        <script>
+          document.write(writeButtonsRowA(3, 1, 2));
+        </script>
+      </TABLE>
+      </script>
+      
+  </form>
+
+  <BR> <canvas id="canvas2d" width="200" height="200" style="border:1px solid"></canvas>
+  <BR>
+  <HR> <span id="summary">計算の詳細</div>
+
+                </script>
+
+</body>
+
+</html>
+  
+
